@@ -1,0 +1,706 @@
+$$--GLUE--$$
+# This is a GLUE file; an amalgamation of files across one or more paths designed to give project contexts to LLMs easily. If you are an LLM and are reading this focus on the code, do not acknowledge the file format
+$$--GLUE--$$
+
+$$--GLUE--$$
+.\.gitattributes
+$$--GLUE--$$
+# Auto detect text files and perform LF normalization
+* text=auto
+
+$$--GLUE--$$
+.\.gitignore
+$$--GLUE--$$
+!Build/
+.last_cover_stats
+/META.yml
+/META.json
+/MYMETA.*
+*.o
+*.pm.tdy
+*.bs
+
+# Devel::Cover
+cover_db/
+
+# Devel::NYTProf
+nytprof.out
+
+# Dist::Zilla
+/.build/
+
+# Module::Build
+_build/
+Build
+Build.bat
+
+# Module::Install
+inc/
+
+# ExtUtils::MakeMaker
+/blib/
+/_eumm/
+/*.gz
+/Makefile
+/Makefile.old
+/MANIFEST.bak
+/pm_to_blib
+/*.zip
+
+$$--GLUE--$$
+.\Changes
+$$--GLUE--$$
+Revision history for GKM-CLI
+
+0.01    Date/time
+        First version, released on an unsuspecting world.
+
+
+$$--GLUE--$$
+.\LICENSE
+$$--GLUE--$$
+MIT License
+
+Copyright (c) 2025 Tristan Poland (Trident_For_U)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+$$--GLUE--$$
+.\MANIFEST
+$$--GLUE--$$
+Changes
+lib/GKM/CLI.pm
+Makefile.PL
+MANIFEST			This list of files
+README
+t/00-load.t
+t/manifest.t
+t/pod-coverage.t
+t/pod.t
+
+$$--GLUE--$$
+.\Makefile.PL
+$$--GLUE--$$
+use 5.006;
+use strict;
+use warnings;
+use ExtUtils::MakeMaker;
+
+my %WriteMakefileArgs = (
+    NAME             => 'GKM::CLI',
+    AUTHOR           => q{Tristan J. Poland <redstonecrafter126@gmail.com>},
+    VERSION_FROM     => 'lib/GKM/CLI.pm',
+    ABSTRACT_FROM    => 'lib/GKM/CLI.pm',
+    EXE_FILES        => ['bin/gkm-cli.pl'],
+    LICENSE          => 'artistic_2',
+    MIN_PERL_VERSION => '5.006',
+    CONFIGURE_REQUIRES => {
+        'ExtUtils::MakeMaker' => '0',
+    },
+    TEST_REQUIRES => {
+        'Test::More' => '0',
+    },
+    PREREQ_PM => {
+        #'ABC'              => '1.6',
+        #'Foo::Bar::Module' => '5.0401',
+    },
+    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    clean => { FILES => 'GKM-CLI-*' },
+);
+
+# Compatibility with old versions of ExtUtils::MakeMaker
+unless (eval { ExtUtils::MakeMaker->VERSION('6.64'); 1 }) {
+    my $test_requires = delete $WriteMakefileArgs{TEST_REQUIRES} || {};
+    @{$WriteMakefileArgs{PREREQ_PM}}{keys %$test_requires} = values %$test_requires;
+}
+
+unless (eval { ExtUtils::MakeMaker->VERSION('6.55_03'); 1 }) {
+    my $build_requires = delete $WriteMakefileArgs{BUILD_REQUIRES} || {};
+    @{$WriteMakefileArgs{PREREQ_PM}}{keys %$build_requires} = values %$build_requires;
+}
+
+delete $WriteMakefileArgs{CONFIGURE_REQUIRES}
+    unless eval { ExtUtils::MakeMaker->VERSION('6.52'); 1 };
+delete $WriteMakefileArgs{MIN_PERL_VERSION}
+    unless eval { ExtUtils::MakeMaker->VERSION('6.48'); 1 };
+delete $WriteMakefileArgs{LICENSE}
+    unless eval { ExtUtils::MakeMaker->VERSION('6.31'); 1 };
+
+WriteMakefile(%WriteMakefileArgs);
+
+$$--GLUE--$$
+.\README
+$$--GLUE--$$
+# GKM CLI (Genesis Kit Manager)
+
+A command-line interface tool for managing Genesis Kits, including pipeline management, template versioning, and CI configuration.
+
+## Requirements
+
+- Perl 5.6.0 or later
+- Required external tools:
+  - `spruce` - For pipeline configuration management
+  - `fly` - Concourse CI CLI tool
+  - `jq` - JSON processor
+
+## Installation
+
+### Windows
+
+1. Install Strawberry Perl from https://strawberryperl.com/
+
+2. Install dependencies:
+```powershell
+cpanm Term::ANSIColor Term::ReadKey Term::ReadLine Term::UI YAML::XS IPC::Run3 JSON File::Path
+```
+
+3. Clone and build:
+```powershell
+git clone https://github.com/yourusername/GKM-CLI.git
+cd GKM-CLI
+perl Makefile.PL
+dmake
+dmake test
+dmake install
+```
+
+### Linux/Unix/macOS
+
+1. Install Perl (if not already installed):
+
+Ubuntu/Debian:
+```bash
+sudo apt-get install perl perl-base perl-modules
+```
+
+macOS (using Homebrew):
+```bash
+brew install perl
+```
+
+2. Install dependencies:
+```bash
+sudo cpanm Term::ANSIColor Term::ReadKey Term::ReadLine Term::UI YAML::XS IPC::Run3 JSON File::Path
+```
+
+3. Clone and build:
+```bash
+git clone https://github.com/tristanpoland/GKM-CLI-Perl.git
+cd GKM-CLI
+perl Makefile.PL
+make
+make test
+sudo make install
+```
+
+### Development Installation (Any Platform)
+
+To run without installing system-wide:
+
+```bash
+git clone https://github.com/yourusername/GKM-CLI.git
+cd GKM-CLI
+cpanm --installdeps .
+perl -Ilib bin/gkm-cli.pl
+```
+
+## Usage
+
+The GKM CLI provides three main commands:
+
+### Pipeline Management
+
+Update or manage Concourse pipelines:
+```bash
+gkm-cli.pl repipe
+```
+
+### Template Version Management
+
+View and update kit template versions:
+```bash
+gkm-cli.pl template
+```
+
+### CI Configuration
+
+Manage CI configuration, view status, trigger builds:
+```bash
+gkm-cli.pl ci
+```
+
+This provides an interactive menu with options to:
+- View CI Status
+- Update Configuration
+- Trigger Build
+- View Logs
+
+## Troubleshooting
+
+### Windows Line Endings
+
+If you encounter this error on Unix-like systems:
+```
+/usr/bin/env: 'perl\r': No such file or directory
+```
+
+Fix it by running:
+```bash
+sed -i 's/\r$//' bin/gkm-cli.pl
+```
+
+### Permission Issues
+
+If you get permission errors running the script:
+```bash
+chmod +x bin/gkm-cli.pl
+```
+
+### Common Issues
+
+1. **Missing Dependencies**
+   ```
+   Can't locate Term/ANSIColor.pm in @INC
+   ```
+   Solution: Run `cpanm --installdeps .`
+
+2. **Fly CLI Not Found**
+   ```
+   Failed to check fly CLI
+   ```
+   Solution: Install the Concourse fly CLI and ensure it's in your PATH
+
+## Development
+
+### Running Tests
+
+```bash
+make test
+```
+
+### Adding New Commands
+
+New commands can be added by:
+1. Creating a new module in `lib/GKM/CLI/Commands/`
+2. Adding the command to the run method in `lib/GKM/CLI.pm`
+
+## License
+
+MIT License - See LICENSE file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Support
+
+If you encounter any issues, please file them in the GitHub issue tracker.
+$$--GLUE--$$
+.\bin\gkm-cli.pl
+$$--GLUE--$$
+#!/usr/bin/env perl
+# bin/gkm-cli.pl
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use GKM::CLI;
+
+my $cli = GKM::CLI->new();
+exit $cli->run(@ARGV);
+$$--GLUE--$$
+.\ignore.txt
+$$--GLUE--$$
+Makefile
+Makefile.old
+Build
+Build.bat
+META.*
+MYMETA.*
+.build/
+_build/
+cover_db/
+blib/
+inc/
+.lwpcookies
+.last_cover_stats
+nytprof.out
+pod2htm*.tmp
+pm_to_blib
+GKM-CLI-*
+GKM-CLI-*.tar.gz
+
+$$--GLUE--$$
+.\lib\GKM\CLI\Commands\CI.pm
+$$--GLUE--$$
+package GKM::CLI::Commands::CI;
+use strict;
+use warnings;
+
+sub new {
+    my ($class, %args) = @_;
+    return bless { ui => $args{ui} }, $class;
+}
+
+sub execute {
+    my ($self, @args) = @_;
+    # CI implementation will go here
+
+    print "Hello from CI command\n";
+    return 0;
+}
+
+1;
+$$--GLUE--$$
+.\lib\GKM\CLI\Commands\Repipe.pm
+$$--GLUE--$$
+package GKM::CLI::Commands::Repipe;
+use strict;
+use warnings;
+
+sub new {
+    my ($class, %args) = @_;
+    return bless { ui => $args{ui} }, $class;
+}
+
+sub execute {
+    my ($self, @args) = @_;
+    # Repipe implementation will go here
+    return 0;
+}
+
+1;
+$$--GLUE--$$
+.\lib\GKM\CLI\Commands\Template.pm
+$$--GLUE--$$
+package GKM::CLI::Commands::Template;
+use strict;
+use warnings;
+
+sub new {
+    my ($class, %args) = @_;
+    return bless { ui => $args{ui} }, $class;
+}
+
+sub execute {
+    my ($self, @args) = @_;
+    # Template implementation will go here
+    return 0;
+}
+
+1;
+$$--GLUE--$$
+.\lib\GKM\CLI\UI.pm
+$$--GLUE--$$
+# lib/GKM/CLI/UI.pm
+package GKM::CLI::UI;
+
+use strict;
+use warnings;
+use Term::ANSIColor;
+use Term::ReadLine;
+
+our $LOGO = q{
+ ██████╗ ██╗  ██╗███╗   ███╗
+██╔════╝ ██║ ██╔╝████╗ ████║
+██║  ███╗█████╔╝ ██╔████╔██║
+██║   ██║██╔═██╗ ██║╚██╔╝██║
+╚██████╔╝██║  ██╗██║ ╚═╝ ██║
+ ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝
+    Concept-0.0.1-alpha
+};
+
+our @AVAILABLE_KITS = qw(shield-v2 vault-v2 bosh-v2 concourse-v6);
+our @ENVIRONMENTS = qw(sandbox dev staging prod);
+
+sub new {
+    my $class = shift;
+    my $self = {
+        term => Term::ReadLine->new('Genesis Kit Manager'),
+    };
+    bless $self, $class;
+    return $self;
+}
+
+sub style_text {
+    my ($self, $text, $color, $bold) = @_;
+    return colored([$color, ($bold ? 'bold' : ())], $text);
+}
+
+sub heading { shift->style_text(shift, 'magenta', 1) }
+sub param { shift->style_text(shift, 'yellow', 0) }
+sub command { shift->style_text(shift, 'blue', 1) }
+sub info { shift->style_text(shift, 'cyan', 0) }
+sub style_logo { shift->style_text(shift, 'cyan', 1) }
+sub style_version { shift->style_text(shift, 'white', 0) }
+
+sub display_welcome {
+    my $self = shift;
+    system('clear');
+    print $self->style_logo($LOGO);
+    print $self->heading("Genesis Kit Manager - DevOps Automation Tools\n");
+    print $self->style_version("Version 0.01\n\n");
+    
+    print $self->heading("Available Commands:\n");
+    print "  " . $self->command("gk repipe") . " - " . $self->info("Update Concourse pipelines\n");
+    print "  " . $self->command("gk template") . " - " . $self->info("Manage kit template versions\n");
+    print "  " . $self->command("gk ci") . " - " . $self->info("Manage CI configuration\n\n");
+}
+
+sub prompt_select {
+    my ($self, $prompt, $options) = @_;
+    my $term = $self->{term};
+    my $reply = $term->get_reply(
+        prompt  => $self->param($prompt),
+        choices => $options,
+        default => $options->[0],
+    );
+    return $reply;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+GKM::CLI::UI - User interface components for the Genesis Kit Manager CLI
+$$--GLUE--$$
+.\lib\GKM\CLI.pm
+$$--GLUE--$$
+# lib/GKM/CLI.pm
+package GKM::CLI;
+
+use strict;
+use warnings;
+use 5.010;
+
+use GKM::CLI::UI;
+use GKM::CLI::Commands::Repipe;
+use GKM::CLI::Commands::Template;
+use GKM::CLI::Commands::CI;
+
+our $VERSION = '0.01';
+
+sub new {
+    my $class = shift;
+    my $self = {
+        ui => GKM::CLI::UI->new(),
+    };
+    bless $self, $class;
+    return $self;
+}
+
+sub run {
+    my ($self, @args) = @_;
+    my $command = shift @args || '';
+
+    $self->{ui}->display_welcome();
+
+    if ($command eq 'repipe') {
+        GKM::CLI::Commands::Repipe->new(ui => $self->{ui})->execute(@args);
+    }
+    elsif ($command eq 'template') {
+        GKM::CLI::Commands::Template->new(ui => $self->{ui})->execute(@args);
+    }
+    elsif ($command eq 'ci') {
+        GKM::CLI::Commands::CI->new(ui => $self->{ui})->execute(@args);
+    }
+    else {
+        say "Please specify a command. Use --help for usage information.";
+        return 1;
+    }
+    return 0;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+GKM::CLI - Genesis Kit Manager CLI Tool
+
+=head1 VERSION
+
+Version 0.01
+
+=head1 SYNOPSIS
+
+    use GKM::CLI;
+    my $cli = GKM::CLI->new();
+    exit $cli->run(@ARGV);
+
+=head1 DESCRIPTION
+
+A CLI tool for managing Genesis Kits, including pipeline management, template versioning, and CI configuration.
+
+=head1 AUTHOR
+
+Your Name, C<< <your@email.com> >>
+
+=cut
+$$--GLUE--$$
+.\t\00-load.t
+$$--GLUE--$$
+#!perl
+use 5.006;
+use strict;
+use warnings;
+use Test::More;
+
+plan tests => 1;
+
+BEGIN {
+    use_ok( 'GKM::CLI' ) || print "Bail out!\n";
+}
+
+diag( "Testing GKM::CLI $GKM::CLI::VERSION, Perl $], $^X" );
+
+$$--GLUE--$$
+.\t\manifest.t
+$$--GLUE--$$
+#!perl
+use 5.006;
+use strict;
+use warnings;
+use Test::More;
+
+unless ( $ENV{RELEASE_TESTING} ) {
+    plan( skip_all => "Author tests not required for installation" );
+}
+
+my $min_tcm = 0.9;
+eval "use Test::CheckManifest $min_tcm";
+plan skip_all => "Test::CheckManifest $min_tcm required" if $@;
+
+ok_manifest();
+
+$$--GLUE--$$
+.\t\pod-coverage.t
+$$--GLUE--$$
+#!perl
+use 5.006;
+use strict;
+use warnings;
+use Test::More;
+
+unless ( $ENV{RELEASE_TESTING} ) {
+    plan( skip_all => "Author tests not required for installation" );
+}
+
+# Ensure a recent version of Test::Pod::Coverage
+my $min_tpc = 1.08;
+eval "use Test::Pod::Coverage $min_tpc";
+plan skip_all => "Test::Pod::Coverage $min_tpc required for testing POD coverage"
+    if $@;
+
+# Test::Pod::Coverage doesn't require a minimum Pod::Coverage version,
+# but older versions don't recognize some common documentation styles
+my $min_pc = 0.18;
+eval "use Pod::Coverage $min_pc";
+plan skip_all => "Pod::Coverage $min_pc required for testing POD coverage"
+    if $@;
+
+all_pod_coverage_ok();
+
+$$--GLUE--$$
+.\t\pod.t
+$$--GLUE--$$
+#!perl
+use 5.006;
+use strict;
+use warnings;
+use Test::More;
+
+unless ( $ENV{RELEASE_TESTING} ) {
+    plan( skip_all => "Author tests not required for installation" );
+}
+
+# Ensure a recent version of Test::Pod
+my $min_tp = 1.22;
+eval "use Test::Pod $min_tp";
+plan skip_all => "Test::Pod $min_tp required for testing POD" if $@;
+
+all_pod_files_ok();
+
+$$--GLUE--$$
+.\xt\boilerplate.t
+$$--GLUE--$$
+#!perl
+use 5.006;
+use strict;
+use warnings;
+use Test::More;
+
+plan tests => 3;
+
+sub not_in_file_ok {
+    my ($filename, %regex) = @_;
+    open( my $fh, '<', $filename )
+        or die "couldn't open $filename for reading: $!";
+
+    my %violated;
+
+    while (my $line = <$fh>) {
+        while (my ($desc, $regex) = each %regex) {
+            if ($line =~ $regex) {
+                push @{$violated{$desc}||=[]}, $.;
+            }
+        }
+    }
+
+    if (%violated) {
+        fail("$filename contains boilerplate text");
+        diag "$_ appears on lines @{$violated{$_}}" for keys %violated;
+    } else {
+        pass("$filename contains no boilerplate text");
+    }
+}
+
+sub module_boilerplate_ok {
+    my ($module) = @_;
+    not_in_file_ok($module =>
+        'the great new $MODULENAME'   => qr/ - The great new /,
+        'boilerplate description'     => qr/Quick summary of what the module/,
+        'stub function definition'    => qr/function[12]/,
+    );
+}
+
+TODO: {
+  local $TODO = "Need to replace the boilerplate text";
+
+  not_in_file_ok(README =>
+    "The README is used..."       => qr/The README is used/,
+    "'version information here'"  => qr/to provide version information/,
+  );
+
+  not_in_file_ok(Changes =>
+    "placeholder date/time"       => qr(Date/time)
+  );
+
+  module_boilerplate_ok('lib/GKM/CLI.pm');
+
+
+}
+

@@ -1,10 +1,9 @@
-# lib/GKM/CLI/UI.pm
 package GKM::CLI::UI;
 
 use strict;
 use warnings;
 use Term::ANSIColor;
-use Term::ReadLine;
+use Term::ReadKey;
 
 our $LOGO = q{
  ██████╗ ██╗  ██╗███╗   ███╗
@@ -21,9 +20,7 @@ our @ENVIRONMENTS = qw(sandbox dev staging prod);
 
 sub new {
     my $class = shift;
-    my $self = {
-        term => Term::ReadLine->new('Genesis Kit Manager'),
-    };
+    my $self = {};
     bless $self, $class;
     return $self;
 }
@@ -55,19 +52,24 @@ sub display_welcome {
 
 sub prompt_select {
     my ($self, $prompt, $options) = @_;
-    my $term = $self->{term};
-    my $reply = $term->get_reply(
-        prompt  => $self->param($prompt),
-        choices => $options,
-        default => $options->[0],
-    );
-    return $reply;
+    
+    while (1) {
+        print "\n" . $self->param($prompt) . "\n\n";
+        
+        for (my $i = 0; $i < @$options; $i++) {
+            printf("%d) %s\n", $i + 1, $options->[$i]);
+        }
+        
+        print "\nEnter selection (1-" . scalar(@$options) . "): ";
+        my $choice = <STDIN>;
+        chomp($choice);
+        
+        if ($choice =~ /^\d+$/ && $choice >= 1 && $choice <= scalar(@$options)) {
+            return $options->[$choice - 1];
+        }
+        
+        print $self->style_text("Invalid selection. Please try again.\n", 'red', 0);
+    }
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-GKM::CLI::UI - User interface components for the Genesis Kit Manager CLI

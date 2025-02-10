@@ -1,0 +1,7 @@
+[Mon Feb 10 07:58:09 2025] Starting view_workflows
+[Mon Feb 10 07:58:09 2025] Fetching workflows
+[Mon Feb 10 07:58:10 2025] Error in view_workflows: Can't locate object method "object_exists" via package "Curses::UI" at /mnt/c/Users/trident/Documents/GitHub/GKM-CLI-Perl/bin/../lib/GKM/CLI/Commands/CI.pm line 242.
+
+[Mon Feb 10 07:59:13 2025] Starting view_workflows
+[Mon Feb 10 07:59:13 2025] Fetching workflows
+[Mon Feb 10 07:59:14 2025] Creating listbox with 0 workflows
