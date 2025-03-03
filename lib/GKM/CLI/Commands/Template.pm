@@ -8,6 +8,7 @@ use File::Spec;
 use File::Copy;
 use File::Find;
 use Try::Tiny;
+use File::Temp;
 
 # Templates metadata file location
 use constant TEMPLATE_METADATA_FILE => '.gkm-templates.json';
@@ -50,14 +51,14 @@ sub execute {
         return $self->apply_template(@args);
     }
     else {
-        $self->{ui}->error("Unknown template command: $cmd");
+        print STDERR "Error: Unknown template command: $cmd\n";
         return $self->show_help();
     }
 }
 
 sub show_help {
     my ($self) = @_;
-    $self->{ui}->output(<<'HELP');
+    print <<'HELP';
 Template management commands:
 
   template list                   - List all registered templates
@@ -79,18 +80,18 @@ sub list_templates {
     my $templates = $self->_load_templates();
     
     if (!$templates || !%$templates) {
-        $self->{ui}->output("No templates registered. Use 'template add' to register a template.");
+        print "No templates registered. Use 'template add' to register a template.\n";
         return 0;
     }
     
-    $self->{ui}->output("Registered templates:");
+    print "Registered templates:\n";
     foreach my $name (sort keys %$templates) {
         my $template = $templates->{$name};
-        $self->{ui}->output(sprintf("  %-20s %s (%s)", 
+        printf("  %-20s %s (%s)\n", 
             $name, 
             $template->{url},
             $template->{current_version} || 'unknown'
-        ));
+        );
     }
     
     return 0;
@@ -100,7 +101,7 @@ sub add_template {
     my ($self, @args) = @_;
     
     if (!@args) {
-        $self->{ui}->error("Missing template URL");
+        print STDERR "Error: Missing template URL\n";
         return 1;
     }
     
@@ -109,21 +110,21 @@ sub add_template {
     my $tag = shift @args || 'main';
     
     if (!$name) {
-        $self->{ui}->error("Could not determine template name from URL, please specify a name");
+        print STDERR "Error: Could not determine template name from URL, please specify a name\n";
         return 1;
     }
     
     my $templates = $self->_load_templates();
     
     if ($templates->{$name}) {
-        $self->{ui}->error("Template '$name' already exists. Remove it first or use a different name.");
+        print STDERR "Error: Template '$name' already exists. Remove it first or use a different name.\n";
         return 1;
     }
     
     # Clone the repository temporarily to verify it exists
     my $tmp_dir = File::Temp->newdir();
     my $result = try {
-        $self->{ui}->info("Cloning template repository...");
+        print "Cloning template repository...\n";
         my $repo = Git::Repository->clone($url, $tmp_dir, { quiet => 1 });
         
         # Check if the tag/branch exists
@@ -141,10 +142,10 @@ sub add_template {
         };
         
         $self->_save_templates($templates);
-        $self->{ui}->success("Template '$name' added successfully.");
+        print "Template '$name' added successfully.\n";
         return 0;
     } catch {
-        $self->{ui}->error("Failed to add template: $_");
+        print STDERR "Error: Failed to add template: $_\n";
         return 1;
     };
     
@@ -158,7 +159,7 @@ sub update_template {
     my $templates = $self->_load_templates();
     
     if (!%$templates) {
-        $self->{ui}->output("No templates registered. Use 'template add' to register a template.");
+        print "No templates registered. Use 'template add' to register a template.\n";
         return 0;
     }
     
@@ -166,12 +167,12 @@ sub update_template {
     
     foreach my $template_name (@to_update) {
         if (!$templates->{$template_name}) {
-            $self->{ui}->error("Template '$template_name' does not exist.");
+            print STDERR "Error: Template '$template_name' does not exist.\n";
             next;
         }
         
         my $template = $templates->{$template_name};
-        $self->{ui}->info("Updating template '$template_name'...");
+        print "Updating template '$template_name'...\n";
         
         my $tmp_dir = File::Temp->newdir();
         try {
@@ -187,12 +188,12 @@ sub update_template {
             if ($sha && $sha ne $template->{current_version}) {
                 $templates->{$template_name}->{current_version} = $sha;
                 $templates->{$template_name}->{updated_at} = time();
-                $self->{ui}->success("Template '$template_name' updated to version $sha");
+                print "Template '$template_name' updated to version $sha\n";
             } else {
-                $self->{ui}->info("Template '$template_name' is already at the latest version.");
+                print "Template '$template_name' is already at the latest version.\n";
             }
         } catch {
-            $self->{ui}->error("Failed to update template '$template_name': $_");
+            print STDERR "Error: Failed to update template '$template_name': $_\n";
         };
     }
     
@@ -204,7 +205,7 @@ sub template_info {
     my ($self, @args) = @_;
     
     if (!@args) {
-        $self->{ui}->error("Missing template name");
+        print STDERR "Error: Missing template name\n";
         return 1;
     }
     
@@ -212,24 +213,24 @@ sub template_info {
     my $templates = $self->_load_templates();
     
     if (!$templates->{$name}) {
-        $self->{ui}->error("Template '$name' does not exist.");
+        print STDERR "Error: Template '$name' does not exist.\n";
         return 1;
     }
     
     my $template = $templates->{$name};
-    $self->{ui}->output("Template: $name");
-    $self->{ui}->output("URL: $template->{url}");
-    $self->{ui}->output("Base version: $template->{base_version}");
-    $self->{ui}->output("Current version: $template->{current_version}");
-    $self->{ui}->output("Added: " . scalar(localtime($template->{added_at})));
+    print "Template: $name\n";
+    print "URL: $template->{url}\n";
+    print "Base version: $template->{base_version}\n";
+    print "Current version: $template->{current_version}\n";
+    print "Added: " . scalar(localtime($template->{added_at})) . "\n";
     
     if ($template->{updated_at}) {
-        $self->{ui}->output("Last updated: " . scalar(localtime($template->{updated_at})));
+        print "Last updated: " . scalar(localtime($template->{updated_at})) . "\n";
     }
     
     if ($template->{last_applied}) {
-        $self->{ui}->output("Last applied: " . scalar(localtime($template->{last_applied})));
-        $self->{ui}->output("Applied version: $template->{applied_version}");
+        print "Last applied: " . scalar(localtime($template->{last_applied})) . "\n";
+        print "Applied version: $template->{applied_version}\n";
     }
     
     return 0;
@@ -239,7 +240,7 @@ sub remove_template {
     my ($self, @args) = @_;
     
     if (!@args) {
-        $self->{ui}->error("Missing template name");
+        print STDERR "Error: Missing template name\n";
         return 1;
     }
     
@@ -247,13 +248,13 @@ sub remove_template {
     my $templates = $self->_load_templates();
     
     if (!$templates->{$name}) {
-        $self->{ui}->error("Template '$name' does not exist.");
+        print STDERR "Error: Template '$name' does not exist.\n";
         return 1;
     }
     
     delete $templates->{$name};
     $self->_save_templates($templates);
-    $self->{ui}->success("Template '$name' removed.");
+    print "Template '$name' removed.\n";
     
     return 0;
 }
@@ -262,7 +263,7 @@ sub apply_template {
     my ($self, @args) = @_;
     
     if (!@args) {
-        $self->{ui}->error("Missing template name");
+        print STDERR "Error: Missing template name\n";
         return 1;
     }
     
@@ -271,7 +272,7 @@ sub apply_template {
     my $templates = $self->_load_templates();
     
     if (!$templates->{$name}) {
-        $self->{ui}->error("Template '$name' does not exist.");
+        print STDERR "Error: Template '$name' does not exist.\n";
         return 1;
     }
     
@@ -282,7 +283,7 @@ sub apply_template {
     try {
         $current_repo = Git::Repository->new();
     } catch {
-        $self->{ui}->error("Current directory is not a git repository.");
+        print STDERR "Error: Current directory is not a git repository.\n";
         return 1;
     };
     
@@ -293,7 +294,7 @@ sub apply_template {
         $git_cmd->close;
         
         if (@status) {
-            $self->{ui}->error("Working directory is not clean. Commit or stash your changes, or use --force.");
+            print STDERR "Error: Working directory is not clean. Commit or stash your changes, or use --force.\n";
             return 1;
         }
     }
@@ -301,7 +302,7 @@ sub apply_template {
     # Clone the template repository to a temporary directory
     my $tmp_dir = File::Temp->newdir();
     try {
-        $self->{ui}->info("Cloning template repository...");
+        print "Cloning template repository...\n";
         my $repo = Git::Repository->clone($template->{url}, $tmp_dir, { quiet => 1 });
         
         # Checkout the right version
@@ -316,9 +317,9 @@ sub apply_template {
         $templates->{$name}->{applied_version} = $template->{current_version};
         $self->_save_templates($templates);
         
-        $self->{ui}->success("Template '$name' applied successfully.");
+        print "Template '$name' applied successfully.\n";
     } catch {
-        $self->{ui}->error("Failed to apply template: $_");
+        print STDERR "Error: Failed to apply template: $_\n";
         return 1;
     };
     
@@ -342,7 +343,7 @@ sub _load_templates {
             
             return decode_json($json);
         } catch {
-            $self->{ui}->error("Failed to load templates: $_");
+            print STDERR "Error: Failed to load templates: $_\n";
             return {};
         };
     }
@@ -363,7 +364,7 @@ sub _save_templates {
         print $fh encode_json($templates);
         close $fh;
     } catch {
-        $self->{ui}->error("Failed to save templates: $_");
+        print STDERR "Error: Failed to save templates: $_\n";
     };
 }
 
@@ -393,7 +394,7 @@ sub _apply_template_files {
             
             $manifest = decode_json($json);
         } catch {
-            $self->{ui}->warn("Failed to load template manifest: $_");
+            print STDERR "Warning: Failed to load template manifest: $_\n";
         };
     }
     
@@ -446,15 +447,15 @@ sub _apply_template_files {
         my ($volume, $directories, $filename) = File::Spec->splitpath($dst);
         make_path(File::Spec->catpath($volume, $directories, '')) unless -d File::Spec->catpath($volume, $directories, '');
         
-        $self->{ui}->info("Applying template file: $file");
+        print "Applying template file: $file\n";
         
         if ($manifest->{merge} && grep { $file eq $_ } @{$manifest->{merge}}) {
             # TODO: Implement smart merging for specific files
             # This would be useful for things like .gitignore, etc.
             # For now, just overwrite
-            copy($src, $dst) or $self->{ui}->warn("Failed to copy $file: $!");
+            copy($src, $dst) or print STDERR "Warning: Failed to copy $file: $!\n";
         } else {
-            copy($src, $dst) or $self->{ui}->warn("Failed to copy $file: $!");
+            copy($src, $dst) or print STDERR "Warning: Failed to copy $file: $!\n";
         }
     }
 }
