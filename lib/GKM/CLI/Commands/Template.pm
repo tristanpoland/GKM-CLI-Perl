@@ -10,9 +10,12 @@ use File::Find;
 use Try::Tiny;
 use File::Temp;
 
-# Templates metadata file location
+# Store templates metadata in a standard location
+# Should be gitignored if inside repo
+use constant TEMPLATE_METADATA_DIR => '.github/kit-meta/';
 use constant TEMPLATE_METADATA_FILE => '.gkm-templates.json';
 
+# Constructor - needs UI for messages and config for paths
 sub new {
     my ($class, %args) = @_;
     return bless { 
@@ -22,16 +25,18 @@ sub new {
     }, $class;
 }
 
+# Main entry point - parses commands and routes to appropriate handlers
 sub execute {
     my ($self, @args) = @_;
     
-    # No arguments provided, show help
+    # No args? Just show help
     unless (@args) {
         return $self->show_help();
     }
     
     my $cmd = shift @args;
     
+    # Route to appropriate subcommand
     if ($cmd eq 'list') {
         return $self->list_templates(@args);
     }
@@ -56,6 +61,7 @@ sub execute {
     }
 }
 
+# Print help text
 sub show_help {
     my ($self) = @_;
     print <<'HELP';
@@ -74,16 +80,19 @@ HELP
     return 0;
 }
 
+# List all registered templates
 sub list_templates {
     my ($self, @args) = @_;
     
     my $templates = $self->_load_templates();
     
+    # Nothing to show
     if (!$templates || !%$templates) {
         print "No templates registered. Use 'template add' to register a template.\n";
         return 0;
     }
     
+    # Display template list with versions
     print "Registered templates:\n";
     foreach my $name (sort keys %$templates) {
         my $template = $templates->{$name};
@@ -97,18 +106,22 @@ sub list_templates {
     return 0;
 }
 
+# Add a new template from git repo
 sub add_template {
     my ($self, @args) = @_;
     
+    # Need at least a URL
     if (!@args) {
         print STDERR "Error: Missing template URL\n";
         return 1;
     }
     
     my $url = shift @args;
+    # Auto-name from repo if not specified, fallback to 'main' branch
     my $name = shift @args || $self->_extract_repo_name($url);
     my $tag = shift @args || 'main';
     
+    # Bail if we can't figure out a name
     if (!$name) {
         print STDERR "Error: Could not determine template name from URL, please specify a name\n";
         return 1;
@@ -116,24 +129,25 @@ sub add_template {
     
     my $templates = $self->_load_templates();
     
+    # Don't allow duplicates
     if ($templates->{$name}) {
         print STDERR "Error: Template '$name' already exists. Remove it first or use a different name.\n";
         return 1;
     }
     
-    # Clone the repository temporarily to verify it exists
+    # Clone to temp dir to validate repo & get commit SHA 
     my $tmp_dir = File::Temp->newdir();
     my $result = try {
         print "Cloning template repository...\n";
         my $repo = Git::Repository->clone($url, $tmp_dir, { quiet => 1 });
         
-        # Check if the tag/branch exists
+        # Get SHA for the tag/branch - allows tracking specific commit
         my $git_cmd = $repo->command('rev-parse', '--verify', $tag);
         my $sha = <$git_cmd>;
         $git_cmd->close;
         chomp $sha if $sha;
         
-        # Store the template metadata
+        # Store template data
         $templates->{$name} = {
             url => $url,
             added_at => time(),
@@ -152,17 +166,20 @@ sub add_template {
     return $result;
 }
 
+# Update template(s) to latest version from origin
 sub update_template {
     my ($self, @args) = @_;
     
     my $name = shift @args;
     my $templates = $self->_load_templates();
     
+    # Nothing to update
     if (!%$templates) {
         print "No templates registered. Use 'template add' to register a template.\n";
         return 0;
     }
     
+    # If name is provided, update just that one, otherwise update all
     my @to_update = $name ? ($name) : keys %$templates;
     
     foreach my $template_name (@to_update) {
@@ -174,17 +191,19 @@ sub update_template {
         my $template = $templates->{$template_name};
         print "Updating template '$template_name'...\n";
         
+        # Use temp dir for the clone
         my $tmp_dir = File::Temp->newdir();
         try {
-            # Clone the repository
+            # Fetch latest from origin
             my $repo = Git::Repository->clone($template->{url}, $tmp_dir, { quiet => 1 });
             
-            # Get the latest commit SHA for the branch/tag
+            # Get SHA of latest commit on the template's base branch
             my $git_cmd = $repo->command('rev-parse', '--verify', $template->{base_version});
             my $sha = <$git_cmd>;
             $git_cmd->close;
             chomp $sha if $sha;
             
+            # Only update if SHA changed
             if ($sha && $sha ne $template->{current_version}) {
                 $templates->{$template_name}->{current_version} = $sha;
                 $templates->{$template_name}->{updated_at} = time();
@@ -201,6 +220,7 @@ sub update_template {
     return 0;
 }
 
+# Display detailed info about a template
 sub template_info {
     my ($self, @args) = @_;
     
@@ -217,6 +237,7 @@ sub template_info {
         return 1;
     }
     
+    # Show all the metadata we have about this template
     my $template = $templates->{$name};
     print "Template: $name\n";
     print "URL: $template->{url}\n";
@@ -236,6 +257,7 @@ sub template_info {
     return 0;
 }
 
+# Remove a template from registry
 sub remove_template {
     my ($self, @args) = @_;
     
@@ -252,6 +274,7 @@ sub remove_template {
         return 1;
     }
     
+    # Just delete it from the registry - doesn't touch any applied files
     delete $templates->{$name};
     $self->_save_templates($templates);
     print "Template '$name' removed.\n";
@@ -259,106 +282,107 @@ sub remove_template {
     return 0;
 }
 
-sub apply_template {
-    my ($self, @args) = @_;
-    
-    if (!@args) {
-        print STDERR "Error: Missing template name\n";
-        return 1;
-    }
-    
-    my $name = shift @args;
-    my $force = grep { $_ eq '--force' } @args;
-    my $templates = $self->_load_templates();
-    
-    if (!$templates->{$name}) {
-        print STDERR "Error: Template '$name' does not exist.\n";
-        return 1;
-    }
-    
-    my $template = $templates->{$name};
-    
-    # Check if we're in a git repository
-    my $current_repo;
-    try {
-        $current_repo = Git::Repository->new();
-    } catch {
-        print STDERR "Error: Current directory is not a git repository.\n";
-        return 1;
-    };
-    
-    # Make sure working directory is clean unless forced
-    unless ($force) {
-        my $git_cmd = $current_repo->command('status', '--porcelain');
-        my @status = <$git_cmd>;
-        $git_cmd->close;
-        
-        if (@status) {
-            print STDERR "Error: Working directory is not clean. Commit or stash your changes, or use --force.\n";
-            return 1;
-        }
-    }
-    
-    # Clone the template repository to a temporary directory
-    my $tmp_dir = File::Temp->newdir();
-    try {
-        print "Cloning template repository...\n";
-        my $repo = Git::Repository->clone($template->{url}, $tmp_dir, { quiet => 1 });
-        
-        # Checkout the right version
-        my $git_cmd = $repo->command('checkout', $template->{current_version}, { quiet => 1 });
-        $git_cmd->close;
-        
-        # Apply the template files
-        $self->_apply_template_files($tmp_dir, $current_repo->work_tree);
-        
-        # Update template metadata
-        $templates->{$name}->{last_applied} = time();
-        $templates->{$name}->{applied_version} = $template->{current_version};
-        $self->_save_templates($templates);
-        
-        print "Template '$name' applied successfully.\n";
-    } catch {
-        print STDERR "Error: Failed to apply template: $_\n";
-        return 1;
-    };
-    
-    return 0;
-}
+# Apply files from the template to target directory
+sub _apply_template_files {
+    my ($self, $template_dir, $target_dir) = @_;
 
-# Helper methods
+    my $manifest_file = File::Spec->catfile($template_dir, '.template-manifest.json');
+    my $manifest = {};
 
-sub _load_templates {
-    my ($self) = @_;
-    
-    my $config_dir = $self->{config}->{config_dir} || "$ENV{HOME}/.gkm";
-    my $templates_file = File::Spec->catfile($config_dir, TEMPLATE_METADATA_FILE);
-    
-    if (-f $templates_file) {
+    if (-f $manifest_file) {
         try {
-            open my $fh, '<', $templates_file or die "Cannot open $templates_file: $!";
+            open my $fh, '<', $manifest_file or die "Cannot open $manifest_file: $!";
             local $/;
             my $json = <$fh>;
             close $fh;
-            
-            return decode_json($json);
+
+            $manifest = decode_json($json);
         } catch {
-            print STDERR "Error: Failed to load templates: $_\n";
-            return {};
+            print STDERR "Warning: Failed to load template manifest: $_\n";
         };
     }
-    
-    return {};
+
+    # Default excluded directories
+    my @dirs_to_exclude = qw(.git .github/workflows);
+    push @dirs_to_exclude, @{$manifest->{exclude} || []};
+
+    # File list from manifest or find all files
+    my @files_to_copy;
+    if ($manifest->{files}) {
+        @files_to_copy = @{$manifest->{files}};
+    } else {
+        find(
+            {
+                wanted => sub {
+                    my $rel_path = File::Spec->abs2rel($_, $template_dir);
+                    return if $rel_path eq '.';
+
+                    foreach my $exclude (@dirs_to_exclude) {
+                        return if $rel_path =~ /^$exclude(?:\/|$)/;
+                    }
+
+                    push @files_to_copy, $rel_path if -f $_;
+                },
+                no_chdir => 1,
+            },
+            $template_dir
+        );
+    }
+
+    # Copy files to target
+    foreach my $file (@files_to_copy) {
+        my $src = File::Spec->catfile($template_dir, $file);
+        my $dst = File::Spec->catfile($target_dir, $file);
+
+        if (-d $src) {
+            make_path($dst) unless -d $dst;
+            next;
+        }
+
+        my ($volume, $directories, $filename) = File::Spec->splitpath($dst);
+        make_path(File::Spec->catpath($volume, $directories, '')) unless -d File::Spec->catpath($volume, $directories, '');
+
+        print "Applying template file: $file\n";
+        copy($src, $dst) or print STDERR "Warning: Failed to copy $file: $!\n";
+    }
 }
 
+
+# ----- Private helper methods -----
+
+# Load template registry from JSON file
+sub _load_templates {
+    my ($self) = @_;
+    
+    my $metadata_dir = File::Spec->catdir($self->_repo_root(), TEMPLATE_METADATA_DIR);
+    my $templates_file = File::Spec->catfile($metadata_dir, TEMPLATE_METADATA_FILE);
+
+    # Check if file exists
+    return {} unless -f $templates_file;
+
+    try {
+        open my $fh, '<', $templates_file or die "Cannot open $templates_file: $!";
+        local $/;
+        my $json = <$fh>;
+        close $fh;
+
+        return decode_json($json);
+    } catch {
+        print STDERR "Error: Failed to load templates: $_\n";
+        return {};
+    };
+}
+
+# Save template registry to JSON file
 sub _save_templates {
     my ($self, $templates) = @_;
-    
-    my $config_dir = $self->{config}->{config_dir} || "$ENV{HOME}/.gkm";
-    make_path($config_dir) unless -d $config_dir;
-    
-    my $templates_file = File::Spec->catfile($config_dir, TEMPLATE_METADATA_FILE);
-    
+
+    my $metadata_dir = File::Spec->catdir($self->_repo_root(), TEMPLATE_METADATA_DIR);
+    my $templates_file = File::Spec->catfile($metadata_dir, TEMPLATE_METADATA_FILE);
+
+    # Create directory if missing
+    make_path($metadata_dir) unless -d $metadata_dir;
+
     try {
         open my $fh, '>', $templates_file or die "Cannot open $templates_file: $!";
         print $fh encode_json($templates);
@@ -368,6 +392,8 @@ sub _save_templates {
     };
 }
 
+# Extract repo name from git URL
+# e.g. https://github.com/user/repo.git -> repo
 sub _extract_repo_name {
     my ($self, $url) = @_;
     
@@ -378,10 +404,31 @@ sub _extract_repo_name {
     return undef;
 }
 
+# Get the root of the git repo
+sub _repo_root {
+    my ($self) = @_;
+
+    try {
+        my $repo = Git::Repository->new();
+        my $git_cmd = $repo->command('rev-parse', '--show-toplevel');
+        my $root = <$git_cmd>;
+        $git_cmd->close;
+        chomp $root;
+        return $root if -d $root;
+    } catch {
+        die "Error: Cannot determine repository root.\n";
+    };
+
+    die "Error: Not inside a valid git repository.\n";
+}
+
+
+# Copy files from template to target dir
+# Handles manifest-based filtering if present
 sub _apply_template_files {
     my ($self, $template_dir, $target_dir) = @_;
     
-    # Check for template manifest which can control which files to apply
+    # Check if template has a manifest for controlling what gets copied
     my $manifest_file = File::Spec->catfile($template_dir, '.template-manifest.json');
     my $manifest = {};
     
@@ -398,15 +445,16 @@ sub _apply_template_files {
         };
     }
     
-    # Determine which files to copy
+    # Determine file set to copy based on manifest or defaults
     my @files_to_copy;
-    my @dirs_to_exclude = qw(.git .github/workflows); # Default excludes
+    # Defaults - don't copy .git or CI workflow files
+    my @dirs_to_exclude = qw(.git .github/workflows); 
     
     if ($manifest->{files}) {
-        # Use explicit file list from manifest
+        # Explicit file list from manifest
         @files_to_copy = @{$manifest->{files}};
     } else {
-        # Copy all files except those in exclude list
+        # Recursive find with exclusions
         if ($manifest->{exclude}) {
             push @dirs_to_exclude, @{$manifest->{exclude}};
         }
@@ -417,12 +465,12 @@ sub _apply_template_files {
                     my $rel_path = File::Spec->abs2rel($_, $template_dir);
                     return if $rel_path eq '.';
                     
-                    # Skip excluded directories
+                    # Skip excluded paths (dot-dirs, etc)
                     foreach my $exclude (@dirs_to_exclude) {
                         return if $rel_path =~ /^$exclude(?:\/|$)/;
                     }
                     
-                    # Skip the manifest itself
+                    # Don't copy the manifest itself
                     return if $rel_path eq '.template-manifest.json';
                     
                     push @files_to_copy, $rel_path;
@@ -433,26 +481,27 @@ sub _apply_template_files {
         );
     }
     
-    # Copy the files
+    # Copy each file, preserving relative paths
     foreach my $file (@files_to_copy) {
         my $src = File::Spec->catfile($template_dir, $file);
         my $dst = File::Spec->catfile($target_dir, $file);
         
+        # Just ensure dir exists for directories
         if (-d $src) {
             make_path($dst) unless -d $dst;
             next;
         }
         
-        # Create parent directory if needed
+        # Make sure target dir exists
         my ($volume, $directories, $filename) = File::Spec->splitpath($dst);
         make_path(File::Spec->catpath($volume, $directories, '')) unless -d File::Spec->catpath($volume, $directories, '');
         
         print "Applying template file: $file\n";
         
         if ($manifest->{merge} && grep { $file eq $_ } @{$manifest->{merge}}) {
-            # TODO: Implement smart merging for specific files
-            # This would be useful for things like .gitignore, etc.
-            # For now, just overwrite
+            # TODO: Smart merge for files like .gitignore
+            # Could append unique lines or use a more complex merge strategy
+            # For now just overwrite - implement this when needed
             copy($src, $dst) or print STDERR "Warning: Failed to copy $file: $!\n";
         } else {
             copy($src, $dst) or print STDERR "Warning: Failed to copy $file: $!\n";
